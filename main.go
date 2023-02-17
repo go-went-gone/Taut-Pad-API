@@ -1,115 +1,97 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"net/http"
-	"strconv"
-	"time"
+	"fmt"
 	"log"
-	"github.com/gorilla/mux"
+	"net/http"
+
+	"github.com/seyiadel/taut-pad/api"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	// "go.mongodb.org/mongo-driver/bson"
 )
 
-type Note struct{
-	Title string `json:"title"`
-	Description string `json:"description"`
+type Note struct {
+	/*no space between _id and omitempty else _id generated would be zeros 
+	and won't allow another insertion, so as to prompt go drivers for 
+	random _id to be generated*/
+	Id 			primitive.ObjectID `json:"_id" bson:"_id,omitempty"` 
+	Title 		string `json:"title" bson:"title"`
+	Description string `json:"description" bson:"description"`
 }
 
-var noteStore = make(map[string]Note)
 
-var id int = 0
+var collection *mongo.Collection
 
-func tautPadHandler(w http.ResponseWriter, r *http.Request){
-	switch r.Method {
+const uri = "mongodb://localhost:27017"
+
+func tautPadHandler(response http.ResponseWriter, request *http.Request){
+	response.Header().Set("content-type", "application/json")
+	switch request.Method {
 	case "POST":
 		var note Note
-		//Decode the incoming Note Json
-		err := json.NewDecoder(r.Body).Decode(&note)
+
+		_ =json.NewDecoder(request.Body).Decode(&note)
+		
+		output, err := collection.InsertOne(context.Background(), note)
 		if err != nil{
-			panic(err)
+			log.Fatal(err)
 		}
-		id++
-		k := strconv.Itoa(id)
-		noteStore[k] = note
-		//Convert to json type
-		j,err := json.Marshal(note)
-		if err != nil{
-			panic(err)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		w.Write(j)
+		json.NewEncoder(response).Encode(output)
+		
+	
 	case "GET":
 		var notes []Note
-		for _,v := range noteStore{
-			notes = append(notes, v)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		j,err := json.Marshal(notes)
+		
+		output, err := collection.Find(context.TODO(), bson.D{})
 		if err != nil{
 			panic(err)
 		}
-		w.WriteHeader(http.StatusOK)
-		w.Write(j)
-	}
-}
-
-
-func getDetailAndDeleteTautPadHandler(w http.ResponseWriter, r * http.Request){
-	switch r.Method{
-	case "PUT":
-		var err error
-		vars := mux.Vars(r)
-		k := vars["id"]
-		var noteToUpdate Note
-		err = json.NewDecoder(r.Body).Decode(&noteToUpdate)
+		err = output.All(context.TODO(), &notes)
 		if err != nil{
 			panic(err)
 		}
-		if _,ok := noteStore[k]; ok{
-			delete(noteStore, k)
-			noteStore[k]=noteToUpdate
-		}else{
-			log.Printf("Couldn't find the resource key %v to delete", k)
-		}
-	case "DELETE":
-		vars := mux.Vars(r)
-		k := vars["id"]
-		if _, ok := noteStore[k]; ok{
-			delete(noteStore, k)
-		}else{
-			log.Printf("Couldn't find the resource key %v to delete", k)
-		}
-	default: 
-		w.WriteHeader(http.StatusNoContent)
+		json.NewEncoder(response).Encode(notes)
+		
 	}
-	
-	
-
-
-
 }
 
-func Logging(h http.Handler) http.Handler{
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request){
-		start := time.Now()
-		log.Printf("Starting Server...")
-		if  r.Method  == "PUT"{
-			log.Printf("Started %v %v", r.Method, r.URL.Path)
-		}
-		h.ServeHTTP(w, r)
-		log.Printf("Completed %v in %v", r.URL.Path, time.Since(start))
-	})
-}
 
 func main(){
-	router := mux.NewRouter().StrictSlash(false)
-	
-	router.HandleFunc("/notes", tautPadHandler).Methods("GET","POST")
-	router.HandleFunc("/notes/{id}", getDetailAndDeleteTautPadHandler).Methods("PUT","DELETE")
+
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(uri))
+	if err != nil{
+		panic(err)
+	}
+
+	defer func(){
+		if err = client.Disconnect(context.TODO()); err != nil{
+			panic(err)
+		}
+	}()
+
+	if err := client.Ping(context.TODO(), readpref.Primary()); err !=nil {
+		panic(err)
+	}
+
+ 	collection = client.Database("tautpad").Collection("notes")
+
+	fmt.Println("Database connected and pinged")
+
+
+	router := http.NewServeMux()
+	router.Handle("/notes", api.Logging(http.HandlerFunc(tautPadHandler)))
+	// router.Handle("/notes/{id}", api.Logging(http.HandlerFunc(getDetailAndDeleteTautPadHandler)))
 
 	server := &http.Server{
 		Addr : "0.0.0.0:8080",
-		Handler : router,
+		Handler: router,
 	}
 
 	server.ListenAndServe()
