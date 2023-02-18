@@ -15,7 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
-	// "go.mongodb.org/mongo-driver/bson"
 )
 
 type Note struct {
@@ -23,8 +22,8 @@ type Note struct {
 	and won't allow another insertion, so as to prompt go drivers for 
 	random _id to be generated*/
 	Id 			primitive.ObjectID `json:"_id" bson:"_id,omitempty"` 
-	Title 		string `json:"title" bson:"title"`
-	Description string `json:"description" bson:"description"`
+	Title 		string `json:"title" bson:"title,omitempty"`
+	Description string `json:"description" bson:"description,omiempty"`
 }
 
 
@@ -63,22 +62,50 @@ func tautPadHandler(response http.ResponseWriter, request *http.Request){
 	}
 }
 
-func getDetailAndDeleteTautPadHandler(response http.ResponseWriter, request *http.Request){
+func getUpdateDeleteTautPadHandler(response http.ResponseWriter, request *http.Request){
+	var note Note
+	ctx := context.TODO()
 	switch request.Method{
 	case "GET":
-		var note Note
 		getId := strings.TrimPrefix(request.URL.Path, "/notes/") 
-		fmt.Println(getId)
 		id, err := primitive.ObjectIDFromHex(getId)
 		if err != nil{
 			panic(err)
 		}
-		err = collection.FindOne(context.TODO(), bson.M{"_id": id} ).Decode(&note)
+		err = collection.FindOne(ctx, bson.M{"_id": id} ).Decode(&note)
 		if err != nil{
-			panic(err)
+				panic(err)
 		}
 		json.NewEncoder(response).Encode(note)
 
+	case "PUT":
+		err := json.NewDecoder(request.Body).Decode(&note)
+		if err != nil{
+			panic(err)
+		}
+		getId := strings.TrimPrefix(request.URL.Path, "/notes/")
+		id, err := primitive.ObjectIDFromHex(getId)
+		if err != nil{
+			panic(err)
+		}
+		result, err := collection.UpdateOne(ctx, bson.M{"_id": id,}, bson.M{"$set": note,})
+		if err != nil{
+			panic(err)
+		}
+		json.NewEncoder(response).Encode(result)
+
+	case "DELETE":
+		getID := strings.TrimPrefix(request.URL.Path, "/notes/")
+		id, err := primitive.ObjectIDFromHex(getID)
+		if err != nil{
+			panic(err)
+		}
+	
+		output, err := collection.DeleteOne(ctx, bson.M{"_id": id,})
+		if err != nil{
+			panic(err)
+		}
+		json.NewEncoder(response).Encode(output)
 	}
 }
 
@@ -106,7 +133,7 @@ func main(){
 
 	router := http.NewServeMux()
 	router.Handle("/notes", api.Logging(http.HandlerFunc(tautPadHandler)))
-	router.Handle("/notes/", api.Logging(http.HandlerFunc(getDetailAndDeleteTautPadHandler)))
+	router.Handle("/notes/", api.Logging(http.HandlerFunc(getUpdateDeleteTautPadHandler)))
 
 	server := &http.Server{
 		Addr : "0.0.0.0:8080",
