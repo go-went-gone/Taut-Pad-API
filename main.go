@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/seyiadel/taut-pad/api"
 
@@ -62,6 +63,24 @@ func tautPadHandler(response http.ResponseWriter, request *http.Request){
 	}
 }
 
+func getDetailAndDeleteTautPadHandler(response http.ResponseWriter, request *http.Request){
+	switch request.Method{
+	case "GET":
+		var note Note
+		getId := strings.TrimPrefix(request.URL.Path, "/notes/") 
+		fmt.Println(getId)
+		id, err := primitive.ObjectIDFromHex(getId)
+		if err != nil{
+			panic(err)
+		}
+		err = collection.FindOne(context.TODO(), bson.M{"_id": id} ).Decode(&note)
+		if err != nil{
+			panic(err)
+		}
+		json.NewEncoder(response).Encode(note)
+
+	}
+}
 
 func main(){
 
@@ -87,7 +106,7 @@ func main(){
 
 	router := http.NewServeMux()
 	router.Handle("/notes", api.Logging(http.HandlerFunc(tautPadHandler)))
-	// router.Handle("/notes/{id}", api.Logging(http.HandlerFunc(getDetailAndDeleteTautPadHandler)))
+	router.Handle("/notes/", api.Logging(http.HandlerFunc(getDetailAndDeleteTautPadHandler)))
 
 	server := &http.Server{
 		Addr : "0.0.0.0:8080",
