@@ -27,7 +27,7 @@ type Note struct {
 }
 
 
-var collection *mongo.Collection
+var collection *mongo.Collection 
 
 const uri = "mongodb://localhost:27017"
 
@@ -63,6 +63,7 @@ func tautPadHandler(response http.ResponseWriter, request *http.Request){
 }
 
 func getUpdateDeleteTautPadHandler(response http.ResponseWriter, request *http.Request){
+	response.Header().Set("content-type", "application/json")
 	var note Note
 	ctx := context.TODO()
 	switch request.Method{
