@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/seyiadel/taut-pad/api"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -133,8 +131,8 @@ func main(){
 
 
 	router := http.NewServeMux()
-	router.Handle("/notes", api.Logging(http.HandlerFunc(tautPadHandler)))
-	router.Handle("/notes/", api.Logging(http.HandlerFunc(getUpdateDeleteTautPadHandler)))
+	router.Handle("/notes", Logging(http.HandlerFunc(tautPadHandler)))
+	router.Handle("/notes/", Logging(http.HandlerFunc(getUpdateDeleteTautPadHandler)))
 
 	server := &http.Server{
 		Addr : "0.0.0.0:8080",
